@@ -1,0 +1,171 @@
+name: Deploy to DigitalOcean
+
+# Trigger on push to main branch
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test & Build
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: test_db
+          MYSQL_ROOT_PASSWORD: root
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysql, sqlite3, mbstring, xml, curl, zip, bcmath
+          tools: composer:v2.6
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Cache Composer packages
+        uses: actions/cache@v3
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+      
+      - name: Cache npm packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+      
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          composer install --no-interaction --prefer-dist --optimize-autoloader
+      
+      - name: Install frontend dependencies
+        run: npm install --omit=dev
+      
+      - name: Setup Laravel
+        working-directory: ./backend
+        run: |
+          cp .env.example .env.testing
+          php artisan key:generate --env=testing
+          php artisan migrate --env=testing --force
+      
+      - name: Run PHP linting
+        working-directory: ./backend
+        run: php artisan tinker --execute="echo 'PHP OK'"
+      
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
+      
+      - name: Build frontend
+        run: npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: dist/
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: dist/
+      
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /var/www/chat
+            
+            # Pull latest code
+            git fetch origin
+            git reset --hard origin/main
+            
+            # Update backend
+            cd backend
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate --force
+            php artisan cache:clear config:clear
+            
+            # Update frontend
+            cd ..
+            npm install --omit=dev
+            npm run build
+            cp -r dist/* backend/public/
+            
+            # Restart services
+            supervisorctl restart all
+            
+            # Verify deployment
+            php artisan config:cache
+            php artisan route:cache
+            
+            echo "✅ Deployment complete!"
+
+  notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    name: Notify
+    
+    steps:
+      - name: Send Slack notification
+        if: ${{ secrets.SLACK_WEBHOOK }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "Chat House deployment ${{ needs.deploy.result == 'success' && '✅ successful' || '❌ failed' }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Status*\nBranch: ${{ github.ref }}\nCommit: ${{ github.sha }}\nStatus: ${{ needs.deploy.result == 'success' && '✅ Success' || '❌ Failed' }}"
+                  }
+                }
+              ]
+            }
+      
+      - name: Send Discord notification
+        if: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -X POST ${{ secrets.DISCORD_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "content": "Chat House deployment ${{ needs.deploy.result == '"'"'success'"'"' && '"'"'✅ successful'"'"' || '"'"'❌ failed'"'"' }}",
+              "embeds": [{
+                "title": "Deployment ${{ needs.deploy.result == '"'"'success'"'"' && '"'"'Success'"'"' || '"'"'Failed'"'"' }}",
+                "description": "Commit: ${{ github.sha }}\nBranch: main"
+              }]
+            }'

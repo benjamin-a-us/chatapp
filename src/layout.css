@@ -1,0 +1,38 @@
+html, body, #root { min-height: 100%; }
+body { overflow: hidden; }
+.dashboard-page { min-height: 100dvh; max-height: 100dvh; overflow-y: auto; overflow-x: hidden; }
+.app-shell { height: 100dvh; overflow: hidden; }
+.workspace { height: calc(100dvh - 72px); min-height: 0; overflow: hidden; }
+.conversation { min-height: 0; overflow: hidden; }
+.message-area { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.message-toast { position: fixed; z-index: 20; top: 86px; right: 24px; width: min(340px, calc(100vw - 32px)); display: grid; gap: 5px; border: 1px solid rgba(238,115,94,.35); border-radius: 14px; padding: 14px 16px; background: var(--conversation-bg); color: var(--theme-ink); text-align: left; box-shadow: 0 16px 40px rgba(0,0,0,.2); animation: toast-in .25s ease both; }.message-toast strong { font-size: 12px; }.message-toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #92938c; font-size: 11px; }.message-toast:hover { border-color: var(--coral); transform: translateY(-2px); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+.profile-cover { height: 150px; margin: -52px -52px 0; background: linear-gradient(120deg, #ee735e, #b86e63 46%, #687b73); border-radius: 22px 22px 0 0; }
+.profile-topbar { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2; }.profile-kicker { color: #92938c; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; }
+.public-profile .profile-hero { margin-top: -34px; position: relative; }
+.public-profile .profile-avatar { border: 5px solid var(--conversation-bg); }
+.profile-actions { display: flex; gap: 10px; margin: -12px 0 28px; }
+.profile-actions .primary-button { width: auto; margin: 0; padding: 10px 15px; }
+.secondary-button { border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--theme-ink); padding: 10px 14px; font-size: 12px; }
+.secondary-button:hover { border-color: var(--coral); color: var(--coral); }
+.profile-facts { align-items: flex-start; }
+.profile-facts div { display: grid; gap: 6px; }
+.profile-facts strong { overflow-wrap: anywhere; }
+
+@media (max-width: 700px) {
+  body { overflow: auto; }
+  .app-shell { height: auto; min-height: 100dvh; overflow: visible; }
+  .dashboard-page { max-height: none; min-height: 100dvh; }
+  .workspace { display: flex; flex-direction: column; height: calc(100dvh - 64px); min-height: calc(100dvh - 64px); overflow: hidden; }
+  .people-panel { display: block; flex: 0 0 auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 14px 12px; }
+  .people-panel .panel-heading { align-items: center; }
+  .people-panel .search-field, .people-panel .filter-row, .people-panel .panel-bottom { display: none; }
+  .people-list { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0 4px; scrollbar-width: thin; }
+  .person-row { min-width: 210px; background: rgba(255,255,255,.45); }
+  .conversation { min-height: 0; flex: 1; overflow: hidden; }
+  .message-area { min-height: 0; }
+  .profile-cover { margin: -22px -18px 0; border-radius: 16px 16px 0 0; height: 110px; }
+  .profile-actions { flex-wrap: wrap; }
+  .profile-facts { flex-direction: column; gap: 16px; }
+}
